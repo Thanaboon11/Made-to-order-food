@@ -834,83 +834,101 @@
             document.getElementById('checkoutModal').classList.add('hidden');
         }
 
-        // จัดการวิธีการชำระเงิน
-        document.addEventListener('DOMContentLoaded', function() {
+        // ฟังก์ชันจัดการการชำระเงิน
+        function setupPaymentHandlers() {
             const paymentMethods = document.querySelectorAll('input[name="paymentMethod"]');
             const transferSection = document.getElementById('transferSection');
             
-            paymentMethods.forEach(method => {
-                method.addEventListener('change', function() {
-                    if (this.value === 'transfer') {
-                        transferSection.classList.remove('hidden');
-                    } else {
-                        transferSection.classList.add('hidden');
-                    }
+            if (paymentMethods.length > 0) {
+                paymentMethods.forEach(method => {
+                    method.addEventListener('change', function() {
+                        if (this.value === 'transfer') {
+                            transferSection.classList.remove('hidden');
+                        } else {
+                            transferSection.classList.add('hidden');
+                        }
+                    });
                 });
-            });
+            }
 
             // ฟอร์มชำระเงิน
-            document.getElementById('checkoutForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
-                const paymentSlip = document.getElementById('paymentSlip').files[0];
-                
-                if (paymentMethod === 'transfer' && !paymentSlip) {
-                    showNotification('กรุณาแนบสลิปการโอนเงิน', 'error');
-                    return;
-                }
-                
-                // สร้างออเดอร์
-                const orderNumber = `ORD${orderCounter++}`;
-                const order = {
-                    id: orderNumber,
-                    items: [...cart],
-                    total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-                    customerInfo: {
-                        name: document.getElementById('customerName').value,
-                        phone: document.getElementById('customerPhone').value,
-                        address: document.getElementById('customerAddress').value
-                    },
-                    paymentMethod: paymentMethod,
-                    paymentSlip: paymentSlip ? URL.createObjectURL(paymentSlip) : null,
-                    status: 'รอการยืนยัน',
-                    timestamp: new Date().toLocaleString('th-TH'),
-                    isNew: true,
-                    deviceInfo: {
-                        deviceId: deviceId,
-                        deviceType: deviceType,
-                        userAgent: navigator.userAgent.substring(0, 50) + '...'
+            const checkoutForm = document.getElementById('checkoutForm');
+            if (checkoutForm) {
+                checkoutForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const paymentMethodElement = document.querySelector('input[name="paymentMethod"]:checked');
+                    if (!paymentMethodElement) {
+                        showNotification('กรุณาเลือกวิธีการชำระเงิน', 'error');
+                        return;
                     }
-                };
-                
-                orders.push(order);
-                cart = [];
-                
-                // บันทึกข้อมูลและส่งสัญญาณ
-                saveDataRealTime();
-                
-                // ส่งสัญญาณออเดอร์ใหม่
-                syncChannel.postMessage({
-                    type: 'NEW_ORDER',
-                    orderNumber: orderNumber,
-                    order: order
+                    
+                    const paymentMethod = paymentMethodElement.value;
+                    const paymentSlip = document.getElementById('paymentSlip').files[0];
+                    
+                    if (paymentMethod === 'transfer' && !paymentSlip) {
+                        showNotification('กรุณาแนบสลิปการโอนเงิน', 'error');
+                        return;
+                    }
+                    
+                    // ตรวจสอบข้อมูลลูกค้า
+                    const customerName = document.getElementById('customerName').value.trim();
+                    const customerPhone = document.getElementById('customerPhone').value.trim();
+                    const customerAddress = document.getElementById('customerAddress').value.trim();
+                    
+                    if (!customerName || !customerPhone || !customerAddress) {
+                        showNotification('กรุณากรอกข้อมูลให้ครบถ้วน', 'error');
+                        return;
+                    }
+                    
+                    // สร้างออเดอร์
+                    const orderNumber = `ORD${orderCounter++}`;
+                    const order = {
+                        id: orderNumber,
+                        items: [...cart],
+                        total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+                        customerInfo: {
+                            name: customerName,
+                            phone: customerPhone,
+                            address: customerAddress
+                        },
+                        paymentMethod: paymentMethod,
+                        paymentSlip: paymentSlip ? URL.createObjectURL(paymentSlip) : null,
+                        status: 'รอการยืนยัน',
+                        timestamp: new Date().toLocaleString('th-TH'),
+                        isNew: true,
+                        deviceInfo: {
+                            deviceId: deviceId,
+                            deviceType: deviceType,
+                            userAgent: navigator.userAgent.substring(0, 50) + '...'
+                        }
+                    };
+                    
+                    orders.push(order);
+                    cart = [];
+                    
+                    // บันทึกข้อมูล
+                    saveDataRealTime();
+                    
+                    console.log('📦 สร้างออเดอร์ใหม่:', orderNumber);
+                    
+                    // แสดงหน้าสถานะ
+                    document.getElementById('checkoutModal').classList.add('hidden');
+                    document.getElementById('orderNumber').textContent = orderNumber;
+                    document.getElementById('currentOrderStatus').textContent = 'รอการยืนยัน';
+                    document.getElementById('orderStatusModal').classList.remove('hidden');
+                    
+                    updateCartCount();
+                    updateOwnerView();
+                    
+                    showNotification('สั่งซื้อสำเร็จ!', 'success');
+                    
+                    // รีเซ็ตฟอร์ม
+                    checkoutForm.reset();
+                    transferSection.classList.add('hidden');
                 });
-                
-                console.log('📦 สร้างออเดอร์ใหม่:', orderNumber);
-                
-                // แสดงหน้าสถานะ
-                document.getElementById('checkoutModal').classList.add('hidden');
-                document.getElementById('orderNumber').textContent = orderNumber;
-                document.getElementById('currentOrderStatus').textContent = 'รอการยืนยัน';
-                document.getElementById('orderStatusModal').classList.remove('hidden');
-                
-                updateCartCount();
-                updateOwnerView();
-                
-                showNotification('สั่งซื้อสำเร็จ!', 'success');
-            });
-        });
+            }
+        }
 
         // ฟังก์ชันสถานะออเดอร์
         function closeOrderStatus() {
@@ -1188,6 +1206,9 @@
 
         // เพิ่มเมนูใหม่
         document.addEventListener('DOMContentLoaded', function() {
+            // ตั้งค่า handlers สำหรับการชำระเงิน
+            setupPaymentHandlers();
+            
             document.getElementById('addMenuForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 
@@ -1382,5 +1403,6 @@
             }
         }, 1000);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97b4ca6bf6a74481',t:'MTc1NzIzMzI2Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97b4d001c7546141',t:'MTc1NzIzMzQ5NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
+
